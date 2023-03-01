@@ -1,0 +1,24 @@
+{
+    "name": "debva/elnix",
+    "description": "PHP Framework",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Debva\\Elnix\\": "src/"
+        },
+        "files": [
+            "src/Helper.php"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Wildhan Ellan",
+            "email": "wildhan.db@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require": {},
+    "require-dev": {}
+}
