@@ -1,2 +1,2 @@
-# elnix
+# Elnix
 Elnix Universal PHP Framework

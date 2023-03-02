@@ -29,6 +29,13 @@ abstract class Router extends Env
         $this->argument = isset($args[2]) ? array_slice($args, 2) : [];
     }
 
+    public function start()
+    {
+        $this->loadRouter();
+
+        $this->loadController();
+    }
+
     protected function header($header)
     {
         return header($header);
@@ -161,29 +168,31 @@ abstract class Router extends Env
             $cpath = preg_replace("/Controller$/", "", $controller);
             $path = implode('/', array_slice(array_map('strtolower', explode("\\", $cpath)), count($prefix)));
 
-            if (starts_with($path, $requestpath = implode('/', $route))) {
+            if (equal_start_with($path, $requestpath = implode('/', $route))) {
                 $class = new $controller;
                 $action = 'index';
                 $data = array_filter(explode('/', trim(substr($requestpath, strlen($path)), '/')));
 
-                if (!empty($data) and method_exists($class, reset($data))) {
+                if (
+                    !empty($data) and
+                    reset($data) !== 'index' and
+                    method_exists($class, reset($data))
+                ) {
                     $action = reset($data);
                     array_shift($data);
                 }
 
-                if ($action !== 'index' or ($action === 'index' and reset($data) !== 'index')) {
-                    $reflection = new \ReflectionMethod($class, $action);
-                    $dataRequired = $reflection->getNumberOfParameters();
+                $reflection = new \ReflectionMethod($class, $action);
+                $dataRequired = $reflection->getNumberOfParameters();
 
-                    if (count($data) === $dataRequired) {
-                        return [
-                            'routename' => implode('.', $route),
-                            'controller' => $controller,
-                            'action' => $action,
-                            'data' => $data,
-                            'url' => join('/', [$this->baseurl, $requestpath])
-                        ];
-                    }
+                if (count($data) === $dataRequired) {
+                    return [
+                        'routename' => implode('.', $route),
+                        'controller' => $controller,
+                        'action' => $action,
+                        'data' => $data,
+                        'url' => join('/', [$this->baseurl, $requestpath])
+                    ];
                 }
             }
         }
@@ -260,12 +269,5 @@ abstract class Router extends Env
         $controller->app->header('Access-Control-Allow-Headers: *');
 
         return $this->response($controller->{$route['action']}(...array_map('urldecode', $route['data'])));
-    }
-
-    public function start()
-    {
-        $this->loadRouter();
-
-        $this->loadController();
     }
 }

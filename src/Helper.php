@@ -127,9 +127,9 @@ if (!function_exists('get_namespace')) {
     }
 }
 
-if (!function_exists('starts_with')) {
-    function starts_with($string, $search)
+if (!function_exists('equal_start_with')) {
+    function equal_start_with($string, $search)
     {
-        return substr($string, 0, strlen($search)) === substr($search, 0, strlen($string));
+        return $string === substr($search, 0, strlen($string));
     }
 }
