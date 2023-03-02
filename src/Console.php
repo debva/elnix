@@ -10,7 +10,7 @@ class Console extends Env
 
     public function __construct()
     {
-        parent::__construct();
+        parent::__construct(join(DIRECTORY_SEPARATOR, [getcwd(), '.env']));
 
         if (getenv('APP_PATH') === false) {
             die('APP_PATH not defined');
@@ -147,13 +147,21 @@ class Console extends Env
                 'description' => 'Make Controller',
                 'argument' => '{name:Controller Name}',
                 'handle' => function () {
+                    $name = explode('/', $this->argument('name'));
                     return $this->generateFile(
                         'Controller',
-                        "{$this->argument('name')}Controller",
+                        implode(DIRECTORY_SEPARATOR, $name) . 'Controller',
                         'controllers',
                         'controller.stub.php',
-                        '{{name}}',
-                        $this->argument('name')
+                        ['{{namespace}}', '{{name}}'],
+                        [
+                            join("\\", [
+                                implode("\\", array_map('ucwords', explode(DIRECTORY_SEPARATOR, env('APP_PATH')))),
+                                'Controllers',
+                                implode("\\", array_slice($name, 0, -1))
+                            ]),
+                            end($name) . 'Controller'
+                        ]
                     );
                 }
             ],
@@ -161,13 +169,21 @@ class Console extends Env
                 'description' => 'Make Middleware',
                 'argument' => '{name:Middleware Name}',
                 'handle' => function () {
+                    $name = explode('/', $this->argument('name'));
                     return $this->generateFile(
                         'Middleware',
-                        $this->argument('name'),
+                        implode(DIRECTORY_SEPARATOR, $name),
                         'middleware',
                         'middleware.stub.php',
-                        '{{name}}',
-                        $this->argument('name')
+                        ['{{namespace}}', '{{name}}'],
+                        [
+                            join("\\", [
+                                implode("\\", array_map('ucwords', explode(DIRECTORY_SEPARATOR, env('APP_PATH')))),
+                                'Middleware',
+                                implode("\\", array_slice($name, 0, -1))
+                            ]),
+                            end($name)
+                        ]
                     );
                 }
             ]

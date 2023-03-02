@@ -4,9 +4,9 @@ namespace Debva\Elnix;
 
 abstract class Env
 {
-    public function __construct()
+    public function __construct($envpath)
     {
-        if (file_exists($envpath = join(DIRECTORY_SEPARATOR, [str_replace(DIRECTORY_SEPARATOR . 'public', '', getcwd()), '.env']))) {
+        if (file_exists($envpath)) {
             $env = file_get_contents($envpath);
             $lines = explode(PHP_EOL, $env);
 

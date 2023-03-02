@@ -1,6 +1,8 @@
 <?php
 
-class {{name}} extends Debva\Elnix\Middleware
+namespace {{namespace}};
+
+class {{name}} extends \Debva\Elnix\Middleware
 {
     public function handle($request, $next)
     {

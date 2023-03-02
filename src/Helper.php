@@ -104,3 +104,32 @@ if (!function_exists('scan_storage')) {
         return $result;
     }
 }
+
+if (!function_exists('get_namespace')) {
+    function get_namespace($filepath)
+    {
+        $namespace = '';
+        $tokens = token_get_all(file_get_contents($filepath));
+
+        foreach ($tokens as $token) {
+            if (is_array($token) && $token[0] === T_NAMESPACE) {
+                for ($i = 1; $i < count($tokens); $i++) {
+                    if ($tokens[$i] === '{' || $tokens[$i] === ';') break;
+                    elseif (is_array($tokens[$i]) and $tokens[$i][1] !== 'namespace') {
+                        $namespace .= trim($tokens[$i][1]);
+                    } else continue;
+                }
+                break;
+            }
+        }
+
+        return $namespace;
+    }
+}
+
+if (!function_exists('starts_with')) {
+    function starts_with($string, $search)
+    {
+        return substr($string, 0, strlen($search)) === substr($search, 0, strlen($string));
+    }
+}

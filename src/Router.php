@@ -4,21 +4,30 @@ namespace Debva\Elnix;
 
 abstract class Router extends Env
 {
-    protected $appPath;
+    const CONTROLLER_PATH = 'Controllers';
 
-    private $host;
+    const MIDDLEWARE_PATH = 'Middleware';
 
-    private $requestPath;
+    private $basepath;
 
-    private $controllerPath;
+    private $baseurl;
 
-    private $controller;
-
-    private $data;
+    private $path;
 
     private $class;
 
-    abstract public function setAppPath($path);
+    public function __construct()
+    {
+        parent::__construct(join(DIRECTORY_SEPARATOR, [getcwd(), '..', '.env']));
+
+        if (getenv('APP_PATH') === false) {
+            die('APP_PATH not defined');
+        }
+
+        $args = isset($_SERVER['argv']) ? $_SERVER['argv'] : [];
+        $this->command = isset($args[1]) ? $args[1] : null;
+        $this->argument = isset($args[2]) ? array_slice($args, 2) : [];
+    }
 
     protected function header($header)
     {
@@ -34,9 +43,8 @@ abstract class Router extends Env
 
     protected function request(...$keys)
     {
-        $keys = is_string($keys) ? [$keys] : flatten($keys);
-
         $requests = $_REQUEST;
+        $keys = is_string($keys) ? [$keys] : flatten($keys);
 
         if (!empty($body = file_get_contents("php://input"))) {
             $requests = array_merge($requests, json_decode($body, true));
@@ -78,14 +86,12 @@ abstract class Router extends Env
         }
 
         if (is_null($route)) {
-            return trim(join('/', [$this->host, implode('/', $this->requestPath)]), '/');
+            return trim(join('/', [$this->baseurl, implode('/', $this->path)]), '/');
         }
 
-        $path = implode('/', array_merge(explode('.', $route), $data));
+        $route = $this->generateRoute(join('.', [$route, implode('.', $data)]));
 
-        $path = trim(str_replace([DIRECTORY_SEPARATOR, 'index'], ['/', ''], strtolower($path)), '/');
-
-        return join('/', [$this->host, $path]);
+        return $route['url'];
     }
 
     protected function paginate($query, $columns)
@@ -99,6 +105,7 @@ abstract class Router extends Env
 
         $this->header("x-data-page: {$page}");
         $this->header("x-data-total: {$query->count()}");
+        $this->header('Access-Control-Expose-Headers: x-data-total, x-data-page');
 
         $query = $query->limit($limit)->offset(($page - 1) * $limit);
 
@@ -130,34 +137,72 @@ abstract class Router extends Env
             }
         }
 
-        return $query->get();
+        return [
+            'columns' => $columns,
+            'data' => $query->get()
+        ];
     }
 
-    private function generateRoute()
+    private function generateRoute($route)
     {
-        $directory = '';
-        $appPath = join(DIRECTORY_SEPARATOR, [$this->appPath, 'controllers']);
-        $scriptName = str_replace('/public/index.php', '', $_SERVER['SCRIPT_NAME']);
+        $controllers = [];
+        $route = explode('.', $route);
+        $prefix = array_merge(explode(DIRECTORY_SEPARATOR, env('APP_PATH')), [self::CONTROLLER_PATH]);
+        $controllerpath = join(DIRECTORY_SEPARATOR, [$this->basepath, self::CONTROLLER_PATH]);
 
-        $this->host = 'http' . (($_SERVER['SERVER_PORT'] == 443) ? "s://" : "://") . $_SERVER['HTTP_HOST'] . $scriptName;
-        $this->requestPath = $requestPath = explode('/', trim(str_replace($scriptName, '', parse_url($_SERVER['REQUEST_URI'])['path']), '/'));
+        foreach (scan_storage($controllerpath) as $filepath) {
+            $controllers[] = join("\\", [
+                get_namespace($file = join(DIRECTORY_SEPARATOR, [$controllerpath, $filepath])),
+                pathinfo($file, PATHINFO_FILENAME)
+            ]);
+        }
 
-        foreach ($requestPath as $path) {
-            $path = array_shift($requestPath);
+        foreach ($controllers  as $controller) {
+            $cpath = preg_replace("/Controller$/", "", $controller);
+            $path = implode('/', array_slice(array_map('strtolower', explode("\\", $cpath)), count($prefix)));
 
-            if (is_file($controllerPath = join(DIRECTORY_SEPARATOR, [$appPath, $directory, $controller = pascal("{$path}Controller.php")]))) {
-                $this->controllerPath = $controllerPath;
-                $this->controller = str_replace('.php', '', $controller);
-                $this->data = $requestPath;
-                break;
+            if (starts_with($path, $requestpath = implode('/', $route))) {
+                $class = new $controller;
+                $action = 'index';
+                $data = array_filter(explode('/', trim(substr($requestpath, strlen($path)), '/')));
+
+                if (!empty($data) and method_exists($class, reset($data))) {
+                    $action = reset($data);
+                    array_shift($data);
+                }
+
+                if ($action !== 'index' or ($action === 'index' and reset($data) !== 'index')) {
+                    $reflection = new \ReflectionMethod($class, $action);
+                    $dataRequired = $reflection->getNumberOfParameters();
+
+                    if (count($data) === $dataRequired) {
+                        return [
+                            'routename' => implode('.', $route),
+                            'controller' => $controller,
+                            'action' => $action,
+                            'data' => $data,
+                            'url' => join('/', [$this->baseurl, $requestpath])
+                        ];
+                    }
+                }
             }
-
-            $directory = join(DIRECTORY_SEPARATOR, [$directory, $path]);
         }
 
-        if (empty($this->controller) or reset($this->data) === 'index') {
-            die('Route not found');
+        die('Route not found');
+    }
+
+    private function loadRouter()
+    {
+        if (!env('APP_PATH')) {
+            die('APP_PATH not defined in .env');
         }
+
+        $this->basepath = rtrim(join(DIRECTORY_SEPARATOR, [getcwd(), '..', env('APP_PATH')]), DIRECTORY_SEPARATOR);
+
+        $scriptname = str_replace('/public/index.php', '', $_SERVER['SCRIPT_NAME']);
+
+        $this->baseurl = 'http' . (($_SERVER['SERVER_PORT'] == 443) ? "s://" : "://") . $_SERVER['HTTP_HOST'] . $scriptname;
+        $this->path = explode('/', trim(str_replace($scriptname, '', parse_url($_SERVER['REQUEST_URI'])['path']), '/'));
 
         $this->class = new Anonymous;
 
@@ -190,69 +235,36 @@ abstract class Router extends Env
 
     private function loadMiddleware($middlewares, $action)
     {
-        $current = 0;
-        $path = join(DIRECTORY_SEPARATOR, [$this->appPath, 'middleware']);
-
-        $next = function ($router) use (&$middlewares, &$current, &$next, $path) {
-            if (count($middlewares) >= ($current + 1)) {
-                $middleware = pascal($middlewares[$current++]);
-
-                if (file_exists($middlewarePath = join(DIRECTORY_SEPARATOR, [$path, "{$middleware}.php"]))) {
-                    require_once($middlewarePath);
-                    return (new $middleware)->handle($router,  $next);
-                }
-            }
-            return true;
-        };
-
-        return $next($this->class);
     }
 
     private function loadController()
     {
-        require_once($this->controllerPath);
+        $route = $this->generateRoute(implode('.', $this->path));
 
-        $controller = new $this->controller;
+        $controller = new $route['controller'];
 
-        $data = $this->data;
+        $controller->app = $this->class;
 
-        $action = empty($data) ? 'index' : reset($data);
+        $controller->crypt = new Crypt;
 
-        if (method_exists($controller, $action)) {
-            array_shift($data);
+        $controller->db = new Database(...env(
+            'DB_HOST',
+            'DB_PORT',
+            'DB_DATABASE',
+            'DB_USERNAME',
+            'DB_PASSWORD',
+            'DB_DRIVER'
+        ));
 
-            $reflection = new \ReflectionMethod($controller, $action);
-            $totalDataRequired = $reflection->getNumberOfParameters();
+        $controller->app->header('Access-Control-Allow-Origin: *');
+        $controller->app->header('Access-Control-Allow-Headers: *');
 
-            if (count($data) !== $totalDataRequired) {
-                die('The route data entered does not match ');
-            }
-
-            $this->loadMiddleware($controller->middleware, $action);
-
-            $controller->app = $this->class;
-
-            $controller->crypt = new Crypt;
-
-            $controller->db = new Database(...env(
-                'DB_HOST',
-                'DB_PORT',
-                'DB_DATABASE',
-                'DB_USERNAME',
-                'DB_PASSWORD',
-                'DB_DRIVER'
-            ));
-
-            $controller->app->header('Access-Control-Allow-Origin: *');
-            $controller->app->header('Access-Control-Allow-Headers: *');
-
-            return $this->response($controller->$action(...array_map('urldecode', $data)));
-        }
+        return $this->response($controller->{$route['action']}(...array_map('urldecode', $route['data'])));
     }
 
     public function start()
     {
-        $this->generateRoute();
+        $this->loadRouter();
 
         $this->loadController();
     }

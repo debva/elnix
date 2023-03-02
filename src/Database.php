@@ -35,7 +35,7 @@ class Database
         }
 
         $this->driver = $driver;
-        $dsn = "{$driver}:host={$host}:{$port};dbname={$database}";
+        $dsn = "{$driver}:host={$host};port={$port};dbname={$database}";
 
         try {
             $this->connection = new \PDO($dsn, $user, $password);
