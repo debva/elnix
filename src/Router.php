@@ -110,12 +110,6 @@ abstract class Router extends Env
         $filters = $this->request('filters') ?: [];
         $sorting = $this->request('sorting') ?: [];
 
-        $this->header("x-data-page: {$page}");
-        $this->header("x-data-total: {$query->count()}");
-        $this->header('Access-Control-Expose-Headers: x-data-total, x-data-page');
-
-        $query = $query->limit($limit)->offset(($page - 1) * $limit);
-
         if (!empty($search)) {
             foreach ($columns as $column) {
                 if ($column['searchable']) {
@@ -144,9 +138,13 @@ abstract class Router extends Env
             }
         }
 
+        $this->header("x-data-page: {$page}");
+        $this->header("x-data-total: {$query->count()}");
+        $this->header('Access-Control-Expose-Headers: x-data-total, x-data-page');
+
         return [
             'columns' => $columns,
-            'data' => $query->get()
+            'data' => $query->limit($limit)->offset(($page - 1) * $limit)->get()
         ];
     }
 
@@ -197,6 +195,7 @@ abstract class Router extends Env
             }
         }
 
+        http_response_code(404);
         die('Route not found');
     }
 
